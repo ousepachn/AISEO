@@ -1,23 +1,18 @@
+const admin = require('../firebaseInit');
 const { getFirestore } = require('firebase-admin/firestore');
 const axios = require('axios');
+const { GoogleGenAI } = require('@google/genai');
 const { COLLECTIONS, ANALYSIS_TYPES, AI_SERVICES } = require('../utils/constants');
+const config = require('../config/environment');
 
 const db = getFirestore();
 
 /**
- * Gets the current AI service configuration from Firestore
- * Falls back to default configuration if not found
+ * Gets the current AI service configuration
+ * Returns default configuration for local testing
  */
 async function getAIConfig() {
-  try {
-    const configDoc = await db.collection(COLLECTIONS.AI_CONFIG).doc('current').get();
-    if (configDoc.exists) {
-      return configDoc.data();
-    }
-  } catch (error) {
-    console.error('Error fetching AI config:', error);
-  }
-  return AI_SERVICES; // Return default config if none found
+  return AI_SERVICES; // Return default config for local testing
 }
 
 /**
@@ -151,32 +146,66 @@ function formatPrompt(template, url, industry, companyName = null) {
     .replace('{company}', companyName || extractCompanyName(url));
 }
 
-async function callGeminiAPI(url, industry, config, analysisType, companyName = null) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error('Gemini API key not configured');
+async function callGeminiAPI(websiteUrl, industry, serviceConfig, analysisType, companyName) {
+  try {
+    const useVertexAI = process.env.GOOGLE_GENAI_USE_VERTEXAI === 'true';
+    console.log('Using Vertex AI:', useVertexAI);
+    
+    const model = serviceConfig.model;
+    const promptTemplate = serviceConfig.promptTemplates[analysisType];
+    
+    if (!promptTemplate) {
+      throw new Error(`No prompt template found for analysis type: ${analysisType}`);
+    }
 
-  const response = await axios.post('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent', {
-    contents: [{
-      parts: [{
-        text: formatPrompt(config.promptTemplates[analysisType], url, industry, companyName)
-      }]
-    }],
-    generationConfig: {
-      temperature: config.temperature,
-      maxOutputTokens: config.maxTokens
+    const prompt = promptTemplate
+      .replace('{websiteUrl}', websiteUrl)
+      .replace('{industry}', industry)
+      .replace('{companyName}', companyName);
+
+    console.log('Sending prompt to Gemini:', prompt);
+
+    let response;
+    if (useVertexAI) {
+      response = await callVertexAI(prompt, model);
+    } else {
+      response = await callGeminiDirect(prompt, model);
     }
-  }, {
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    }
+
+    return response;
+  } catch (error) {
+    console.error('Gemini API error:', error);
+    throw new Error(`Gemini API error: ${error.message}`);
+  }
+}
+
+async function callGeminiDirect(prompt, model) {
+  // For direct Gemini API, you may need to use API key auth (not Vertex)
+  // This is a placeholder; adjust as needed for your use case
+  throw new Error('Direct Gemini API is not supported with @google/genai. Use Vertex AI.');
+}
+
+async function callVertexAI(prompt, model) {
+  const ai = new GoogleGenAI({
+    vertexai: true,
+    project: process.env.GOOGLE_CLOUD_PROJECT,
+    location: process.env.GOOGLE_CLOUD_LOCATION || 'global',
   });
 
-  return response.data;
+  const response = await ai.models.generateContent({
+    model,
+    contents: prompt,
+  });
+
+  return {
+    text: response.text,
+    model,
+    // Usage metadata is not available in this API, so omit for now
+  };
 }
 
 async function callClaudeAPI(url, industry, config, analysisType, companyName = null) {
-  const apiKey = process.env.CLAUDE_API_KEY;
+  const apiKey = config.claudeApiKey;
   if (!apiKey) throw new Error('Claude API key not configured');
 
   const response = await axios.post('https://api.anthropic.com/v1/messages', {
@@ -199,7 +228,7 @@ async function callClaudeAPI(url, industry, config, analysisType, companyName = 
 }
 
 async function callChatGPTAPI(url, industry, config, analysisType, companyName = null) {
-  const apiKey = process.env.CHATGPT_API_KEY;
+  const apiKey = config.chatGptApiKey;
   if (!apiKey) throw new Error('ChatGPT API key not configured');
 
   const response = await axios.post('https://api.openai.com/v1/chat/completions', {
@@ -218,4 +247,46 @@ async function callChatGPTAPI(url, industry, config, analysisType, companyName =
   });
 
   return response.data;
-} 
+}
+
+/**
+ * HTTP endpoint for direct company analysis
+ */
+exports.analyzeCompany = async (data) => {
+  const { url, industry } = data;
+  
+  if (!url) {
+    throw new Error('URL is required');
+  }
+
+  try {
+    // Get current AI configuration
+    const aiConfig = await getAIConfig();
+    const serviceConfig = aiConfig[ANALYSIS_TYPES.GEMINI]; // Default to Gemini
+
+    // Check if service is enabled
+    if (!serviceConfig || !serviceConfig.enabled) {
+      throw new Error('AI service is disabled or not configured');
+    }
+
+    // Extract company name from URL
+    const companyName = extractCompanyName(url);
+
+    // Make API call for company analysis
+    const result = await callGeminiAPI(url, industry, serviceConfig, 'companyAnalysis', companyName);
+
+    return {
+      status: 'completed',
+      result,
+      model: serviceConfig.model,
+      timestamp: new Date()
+    };
+  } catch (error) {
+    console.error('Error in company analysis:', error);
+    throw error;
+  }
+};
+
+exports.getAIConfig = getAIConfig;
+exports.extractCompanyName = extractCompanyName;
+exports.callGeminiAPI = callGeminiAPI; 
