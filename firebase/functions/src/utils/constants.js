@@ -20,7 +20,7 @@ exports.ANALYSIS_TYPES = {
 exports.AI_SERVICES = {
   [exports.ANALYSIS_TYPES.GEMINI]: {
     enabled: true,
-    model: 'gemini-pro',
+    model: 'gemini-2.0-flash',
     maxTokens: 2048,
     temperature: 0.7,
     promptTemplates: {

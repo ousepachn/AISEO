@@ -158,10 +158,17 @@ async function callGeminiAPI(websiteUrl, industry, serviceConfig, analysisType, 
       throw new Error(`No prompt template found for analysis type: ${analysisType}`);
     }
 
+    // Add safe fallbacks
+    const safeCompanyName = companyName && companyName.trim() !== '' ? companyName : 'the company';
+    const safeWebsiteUrl = websiteUrl && websiteUrl.trim() !== '' ? websiteUrl : 'the website';
+    const safeIndustry = industry && industry.trim() !== '' ? industry : 'the industry';
+
     const prompt = promptTemplate
-      .replace('{websiteUrl}', websiteUrl)
-      .replace('{industry}', industry)
-      .replace('{companyName}', companyName);
+      .replace('{websiteUrl}', safeWebsiteUrl)
+      .replace('{url}', safeWebsiteUrl)
+      .replace('{industry}', safeIndustry)
+      .replace('{companyName}', safeCompanyName)
+      .replace('{company}', safeCompanyName);
 
     console.log('Sending prompt to Gemini:', prompt);
 
@@ -253,7 +260,7 @@ async function callChatGPTAPI(url, industry, config, analysisType, companyName =
  * HTTP endpoint for direct company analysis
  */
 exports.analyzeCompany = async (data) => {
-  const { url, industry } = data;
+  const { url, industry, companyName: providedCompanyName } = data;
   
   if (!url) {
     throw new Error('URL is required');
@@ -269,8 +276,10 @@ exports.analyzeCompany = async (data) => {
       throw new Error('AI service is disabled or not configured');
     }
 
-    // Extract company name from URL
-    const companyName = extractCompanyName(url);
+    // Use provided companyName if available, otherwise extract from URL
+    const companyName = providedCompanyName && providedCompanyName.trim() !== ''
+      ? providedCompanyName
+      : extractCompanyName(url);
 
     // Make API call for company analysis
     const result = await callGeminiAPI(url, industry, serviceConfig, 'companyAnalysis', companyName);
