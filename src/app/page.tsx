@@ -1,14 +1,39 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
+import { db } from "./firebase";
+import { doc, onSnapshot } from "firebase/firestore";
 
 const TOTAL_STEPS = 4;
+
+const FormattedText = ({ text }: { text: string | undefined }) => {
+  if (!text) {
+    return null;
+  }
+
+  // This regex splits the text by the bold markdown (**text**), keeping the delimiter.
+  const parts = text.split(/(\*\*.*?\*\*)/g);
+
+  return (
+    <>
+      {parts.map((part, index) => {
+        if (part.startsWith("**") && part.endsWith("**")) {
+          // It's a bold part, render it as a strong tag.
+          return <strong key={index}>{part.slice(2, -2)}</strong>;
+        }
+        // It's a regular part.
+        return part;
+      })}
+    </>
+  );
+};
 
 export default function Home() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<any>(null);
+  const [reportId, setReportId] = useState<string | null>(null);
 
   // Form data
   const [form, setForm] = useState({
@@ -39,7 +64,8 @@ export default function Home() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             ...form,
-            websiteUrl: formattedUrl
+            websiteUrl: formattedUrl,
+            enabledServices: ['gemini',  'chatgpt'], // 'claude'
           }),
         });
 
@@ -48,7 +74,7 @@ export default function Home() {
         }
 
         const data = await response.json();
-        setResults(data);
+        setReportId(data.reportId);
         setStep(TOTAL_STEPS + 1);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred');
@@ -62,6 +88,19 @@ export default function Home() {
 
   const handleBack = () => setStep((s) => Math.max(s - 1, 1));
   const handleSkip = () => handleNext();
+
+  useEffect(() => {
+    if (!reportId) return;
+
+    const unsub = onSnapshot(doc(db, "reports", reportId), (doc) => {
+      const data = doc.data();
+      if (data) {
+        setResults(data);
+      }
+    });
+
+    return () => unsub();
+  }, [reportId]);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
@@ -233,6 +272,7 @@ export default function Home() {
                 <button 
                   onClick={() => {
                     setResults(null);
+                    setReportId(null);
                     setStep(1);
                   }} 
                   className="mt-6 text-green-600 hover:text-green-700 font-semibold text-sm"
@@ -243,16 +283,16 @@ export default function Home() {
 
               {/* Results Display */}
               <div className="grid gap-8">
-                {/* AI Comparison */}
+                {/* AI Analysis */}
                 <div className="bg-white rounded-2xl shadow-xl p-8">
-                  <h3 className="text-2xl font-bold mb-6 text-slate-900">AI Comparison</h3>
-                  <div className="grid md:grid-cols-3 gap-6">
-                    {Object.entries(results.aiComparison || {}).map(([model, analysis]) => (
+                  <h3 className="text-2xl font-bold mb-6 text-slate-900">AI Analysis</h3>
+                  <div className="grid md:grid-cols-2 gap-6">
+                    {Object.entries(results.aiAnalysis || {}).map(([model, analysis]: [string, any]) => (
                       <div key={model} className="border border-slate-200 rounded-xl p-6">
                         <h4 className="font-semibold text-lg mb-4 capitalize">{model}</h4>
-                        <pre className="text-sm text-slate-600 whitespace-pre-wrap">
-                          {JSON.stringify(analysis, null, 2)}
-                        </pre>
+                        <div className="text-sm text-slate-600 whitespace-pre-wrap">
+                          <FormattedText text={analysis?.companyAnalysis?.text} />
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -261,16 +301,32 @@ export default function Home() {
                 {/* SEO Analysis */}
                 <div className="bg-white rounded-2xl shadow-xl p-8">
                   <h3 className="text-2xl font-bold mb-6 text-slate-900">SEO Analysis</h3>
-                  <div className="grid gap-6">
-                    {Object.entries(results.seoAnalysis || {}).map(([type, data]) => (
-                      <div key={type} className="border border-slate-200 rounded-xl p-6">
-                        <h4 className="font-semibold text-lg mb-4 capitalize">{type}</h4>
-                        <pre className="text-sm text-slate-600 whitespace-pre-wrap">
-                          {JSON.stringify(data, null, 2)}
-                        </pre>
+                  <div className="grid md:grid-cols-2 gap-6">
+                    {Object.entries(results.aiAnalysis || {}).map(([model, analysis]: [string, any]) => (
+                      <div key={model} className="border border-slate-200 rounded-xl p-6">
+                        <h4 className="font-semibold text-lg mb-4 capitalize">{model}</h4>
+                        <div className="text-sm text-slate-600 whitespace-pre-wrap">
+                          <FormattedText text={analysis?.seoAnalysis?.text} />
+                        </div>
                       </div>
                     ))}
                   </div>
+                </div>
+
+                {/* Website Structure Analysis */}
+                <div className="bg-white rounded-2xl shadow-xl p-8">
+                  <h3 className="text-2xl font-bold mb-6 text-slate-900">Website Structure Analysis</h3>
+                  <pre className="text-sm text-slate-600 whitespace-pre-wrap bg-slate-50 p-4 rounded-lg">
+                    {JSON.stringify(results.websiteStructure, null, 2)}
+                  </pre>
+                </div>
+
+                {/* PageSpeed Analysis */}
+                <div className="bg-white rounded-2xl shadow-xl p-8">
+                  <h3 className="text-2xl font-bold mb-6 text-slate-900">PageSpeed Analysis</h3>
+                  <pre className="text-sm text-slate-600 whitespace-pre-wrap bg-slate-50 p-4 rounded-lg">
+                    {JSON.stringify(results.pageSpeed, null, 2)}
+                  </pre>
                 </div>
               </div>
             </div>

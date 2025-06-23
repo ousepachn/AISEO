@@ -10,8 +10,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Website URL is required' }, { status: 400 });
     }
 
-    // 3. Use the direct analyzeCompany endpoint
-    const firebaseFunctionUrl = 'http://127.0.0.1:5002/aiseo-ff704/us-central1/analyzeCompany';
+    // 3. Use the analyze endpoint that supports multiple AI models
+    const firebaseFunctionUrl = 'http://127.0.0.1:5002/aiseo-ff704/us-central1/analyze';
 
     // 4. Forward the request to the Firebase Function
     const firebaseResponse = await fetch(firebaseFunctionUrl, {
@@ -20,9 +20,11 @@ export async function POST(request: Request) {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        url: body.websiteUrl,
+        websiteUrl: body.websiteUrl,
         industry: body.industry || 'Technology',
-        companyName: body.companyName || undefined,
+        companyName: body.companyName,
+        email: body.email,
+        enabledServices: body.enabledServices || ['gemini', 'chatgpt'],
       }),
     });
 
@@ -33,18 +35,14 @@ export async function POST(request: Request) {
       
       // Return a more user-friendly error message
       return NextResponse.json({ 
-        error: 'Failed to analyze website. Please make sure the AI service is properly configured.',
+        error: 'Failed to analyze website. Please make sure the AI services are properly configured.',
         details: errorData.error
       }, { status: 500 });
     }
     
     // 6. Return the result from Firebase back to the client
     const data = await firebaseResponse.json();
-    // Wrap the result for the frontend
-    return NextResponse.json({
-      aiComparison: { gemini: data.result },
-      seoAnalysis: {}
-    });
+    return NextResponse.json(data);
 
   } catch (error) {
     console.error('Error in proxy route:', error);

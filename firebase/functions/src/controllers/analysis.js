@@ -212,4 +212,85 @@ function generateRecommendations($) {
   });
   
   return recommendations;
-} 
+}
+
+exports.handleReportCompletion = async (event) => {
+  const { reportId } = event.params;
+  console.log(`[handleReportCompletion] Triggered for reportId: ${reportId}`);
+
+  try {
+    // 1. Get the main report document to check its status and enabled services
+    const reportRef = db.collection('reports').doc(reportId);
+    const reportDoc = await reportRef.get();
+
+    if (!reportDoc.exists) {
+      console.error(`[handleReportCompletion] Report document ${reportId} not found.`);
+      return null;
+    }
+
+    const reportData = reportDoc.data();
+    if (reportData.status === 'completed') {
+      console.log(`[handleReportCompletion] Report ${reportId} is already completed.`);
+      return null;
+    }
+
+    // 2. Get the analysis results from the ANALYSIS_RESULTS collection
+    const analysisResultsRef = db.collection('analysis_results').doc(reportId);
+    const analysisResultsDoc = await analysisResultsRef.get();
+
+    if (!analysisResultsDoc.exists) {
+      console.log(`[handleReportCompletion] Analysis results for ${reportId} not found yet. Waiting for more data.`);
+      return null;
+    }
+
+    const analysisResultsData = analysisResultsDoc.data();
+
+    // 3. Check if all expected analyses are complete
+    const enabledServices = reportData.enabledServices || [];
+    const completedServices = Object.keys(analysisResultsData).filter(key => 
+        analysisResultsData[key] && analysisResultsData[key].status === 'completed'
+    );
+
+    // We expect one result for each enabled AI service, plus pagespeed and websiteStructure
+    const expectedCompletionCount = enabledServices.length + 2;
+
+    if (completedServices.length < expectedCompletionCount) {
+      console.log(`[handleReportCompletion] Report ${reportId} is not yet complete. Expected ${expectedCompletionCount}, have ${completedServices.length}.`);
+      return null;
+    }
+
+    // 4. If all results are in, aggregate them into the final format
+    console.log(`[handleReportCompletion] All results for ${reportId} are in. Aggregating...`);
+
+    const finalReport = {
+      aiAnalysis: {},
+      websiteStructure: analysisResultsData.websiteStructure || { error: 'Data not found' },
+      pageSpeed: analysisResultsData.pageSpeed || { error: 'Data not found' },
+    };
+
+    enabledServices.forEach(service => {
+      if (analysisResultsData[service]) {
+        finalReport.aiAnalysis[service] = analysisResultsData[service];
+      }
+    });
+
+    // 5. Update the main report document with the aggregated data and set status to 'completed'
+    await reportRef.update({
+      ...finalReport,
+      status: 'completed',
+      completedAt: new Date(),
+    });
+
+    console.log(`[handleReportCompletion] Successfully updated report ${reportId} to completed.`);
+
+  } catch (error) {
+    console.error(`[handleReportCompletion] Error processing report ${reportId}:`, error);
+    // Optionally, update the report status to 'failed'
+    await db.collection('reports').doc(reportId).update({
+      status: 'failed',
+      error: error.message,
+    });
+  }
+
+  return null;
+}; 

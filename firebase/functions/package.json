@@ -3,9 +3,9 @@
   "description": "Cloud Functions for Firebase",
   "scripts": {
     "lint": "eslint .",
-    "serve": "GOOGLE_CLOUD_PROJECT=aiseo-ff704 GOOGLE_CLOUD_LOCATION=global GOOGLE_GENAI_USE_VERTEXAI=true NODE_ENV=local firebase emulators:start --only functions",
-    "serve:dev": "NODE_ENV=development firebase emulators:start --only functions",
-    "serve:test": "NODE_ENV=test firebase emulators:start --only functions",
+    "serve": "GOOGLE_CLOUD_PROJECT=aiseo-ff704 GOOGLE_CLOUD_LOCATION=global GOOGLE_GENAI_USE_VERTEXAI=true NODE_ENV=local firebase emulators:start",
+    "serve:dev": "NODE_ENV=development firebase emulators:start",
+    "serve:test": "NODE_ENV=test firebase emulators:start",
     "serve:prod": "NODE_ENV=production firebase emulators:start --only functions",
     "shell": "firebase functions:shell",
     "start": "npm run shell",

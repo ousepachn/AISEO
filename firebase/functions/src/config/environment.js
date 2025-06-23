@@ -39,7 +39,7 @@ console.log('Environment variables loaded:', {
   MYAPP_GOOGLE_GENAI_USE_VERTEXAI: process.env.MYAPP_GOOGLE_GENAI_USE_VERTEXAI,
   MYAPP_GEMINI_API_KEY: process.env.MYAPP_GEMINI_API_KEY ? '***' : undefined,
   MYAPP_CLAUDE_API_KEY: process.env.MYAPP_CLAUDE_API_KEY ? '***' : undefined,
-  MYAPP_CHATGPT_API_KEY: process.env.MYAPP_CHATGPT_API_KEY ? '***' : undefined,
+  MYAPP_CHATGPT_API_KEY: process.env.MYAPP_CHATGPT_API_KEY,
   MYAPP_PAGESPEED_API_KEY: process.env.MYAPP_PAGESPEED_API_KEY ? '***' : undefined,
   MYAPP_FIREBASE_PROJECT_ID: process.env.MYAPP_FIREBASE_PROJECT_ID,
 });

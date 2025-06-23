@@ -1,5 +1,43 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
+const { getFirestore } = require('firebase-admin/firestore');
+const { COLLECTIONS } = require('../utils/constants');
+
+const db = getFirestore();
+
+/**
+ * Pub/Sub handler for website structure analysis
+ * @param {import('firebase-functions/v2/pubsub').Message} event - The Pub/Sub event
+ */
+exports.handleWebsiteStructureAnalysis = async (event) => {
+  const { websiteUrl, reportId } = JSON.parse(Buffer.from(event.data.message.data, 'base64').toString());
+
+  try {
+    const result = await exports.analyzeWebsiteStructure(websiteUrl);
+
+    // Store the result in Firestore
+    await db.collection(COLLECTIONS.ANALYSIS_RESULTS).doc(reportId).set({
+      websiteStructure: {
+        ...result,
+        status: 'completed',
+        timestamp: new Date()
+      }
+    }, { merge: true });
+
+    return null;
+  } catch (error) {
+    console.error('Error in Website Structure analysis:', error);
+    // Store error in Firestore
+    await db.collection(COLLECTIONS.ANALYSIS_RESULTS).doc(reportId).set({
+      websiteStructure: {
+        error: error.message,
+        status: 'error',
+        timestamp: new Date()
+      }
+    }, { merge: true });
+    throw error;
+  }
+};
 
 /**
  * Analyzes the structure of a website

@@ -4,7 +4,7 @@ require('dotenv').config();
 // Import Firebase Functions v2 modules
 const { onRequest } = require('firebase-functions/v2/https');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
-const { onDocumentCreated } = require('firebase-functions/v2/firestore');
+const { onDocumentCreated, onDocumentUpdated } = require('firebase-functions/v2/firestore');
 const { onMessagePublished } = require('firebase-functions/v2/pubsub');
 const { setGlobalOptions } = require('firebase-functions/v2');
 
@@ -12,6 +12,7 @@ const { setGlobalOptions } = require('firebase-functions/v2');
 const { handleAIAnalysis, updateAIConfig } = require('./controllers/aiAnalysis');
 const { handlePageSpeedAnalysis } = require('./controllers/pageSpeed');
 const { handleWebsiteStructureAnalysis } = require('./controllers/websiteStructure');
+const { handleReportCompletion } = require('./controllers/analysis');
 const { TOPICS, ANALYSIS_TYPES, COLLECTIONS } = require('./utils/constants');
 const { db, pubSubClient } = require('./firebaseInit');
 const config = require('./config/environment');
@@ -37,13 +38,17 @@ exports.analyze = onRequest({
   timeoutSeconds: 60,
   memory: '256MB',
 }, async (req, res) => {
+  console.log('[analyze] Function triggered.');
   const { websiteUrl, email, industry, location, enabledServices } = req.body;
+  console.log('[analyze] Request body:', { websiteUrl, email, industry, enabledServices });
 
   if (!websiteUrl) {
+    console.log('[analyze] Error: Website URL is required.');
     return res.status(400).send({ error: 'Website URL is required.' });
   }
 
   try {
+    console.log('[analyze] Creating initial report document in Firestore...');
     // Create initial report document
     const reportRef = await db.collection(COLLECTIONS.REPORTS).add({
       websiteUrl,
@@ -52,11 +57,14 @@ exports.analyze = onRequest({
       status: 'processing',
       enabledServices: enabledServices || [ANALYSIS_TYPES.GEMINI, ANALYSIS_TYPES.CLAUDE, ANALYSIS_TYPES.CHATGPT]
     });
+    console.log('[analyze] Report document created with ID:', reportRef.id);
 
     const reportId = reportRef.id;
 
+    console.log('[analyze] Publishing messages to Pub/Sub...');
     // Trigger AI analysis for each enabled model
     for (const analysisType of (enabledServices || [ANALYSIS_TYPES.GEMINI, ANALYSIS_TYPES.CLAUDE, ANALYSIS_TYPES.CHATGPT])) {
+      console.log(`[analyze] Publishing message for ${analysisType}...`);
       const dataBuffer = Buffer.from(JSON.stringify({
         websiteUrl,
         industry,
@@ -64,29 +72,35 @@ exports.analyze = onRequest({
         analysisType
       }));
       await pubSubClient.topic(TOPICS.AI_ANALYSIS).publishMessage({ data: dataBuffer });
+      console.log(`[analyze] Message for ${analysisType} published.`);
     }
 
     // Trigger PageSpeed analysis
+    console.log('[analyze] Publishing message for PageSpeed analysis...');
     const pageSpeedBuffer = Buffer.from(JSON.stringify({
       websiteUrl,
       reportId
     }));
     await pubSubClient.topic(TOPICS.PAGESPEED_ANALYSIS).publishMessage({ data: pageSpeedBuffer });
+    console.log('[analyze] Message for PageSpeed analysis published.');
 
     // Trigger website structure analysis
+    console.log('[analyze] Publishing message for website structure analysis...');
     const structureBuffer = Buffer.from(JSON.stringify({
       websiteUrl,
       reportId
     }));
     await pubSubClient.topic(TOPICS.WEBSITE_STRUCTURE).publishMessage({ data: structureBuffer });
+    console.log('[analyze] Message for website structure analysis published.');
 
+    console.log('[analyze] All messages published. Sending success response.');
     // Return the report ID to the client
     res.status(200).send({ 
       reportId,
       message: 'Analysis started successfully. Results will be available shortly.'
     });
   } catch (error) {
-    console.error('Error initiating analysis:', error);
+    console.error('[analyze] Error initiating analysis:', error);
     res.status(500).send({ error: 'Failed to initiate analysis' });
   }
 });
@@ -165,6 +179,16 @@ exports.handleWebsiteStructureAnalysis = onMessagePublished({
 }, async (event) => {
   return handleWebsiteStructureAnalysis(event);
 });
+
+/**
+ * Firestore trigger to aggregate results when an analysis is complete
+ */
+exports.aggregateResults = onDocumentUpdated({
+  document: `${COLLECTIONS.ANALYSIS_RESULTS}/{reportId}`,
+  maxInstances: 10,
+  timeoutSeconds: 60,
+  memory: '256MB',
+}, handleReportCompletion);
 
 /**
  * Pub/Sub function for PDF generation
