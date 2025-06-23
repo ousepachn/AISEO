@@ -23,6 +23,7 @@ export async function POST(request: Request) {
         websiteUrl: body.websiteUrl,
         industry: body.industry || 'Technology',
         companyName: body.companyName,
+        location: body.location,
         email: body.email,
         enabledServices: body.enabledServices || ['gemini', 'chatgpt'],
       }),

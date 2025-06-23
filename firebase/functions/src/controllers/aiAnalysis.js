@@ -66,8 +66,8 @@ function extractCompanyName(url) {
 exports.handleAIAnalysis = async (event) => {
   console.log('Starting AI analysis with message:', event.data.message);
   
-  const { websiteUrl, industry, reportId, analysisType } = JSON.parse(Buffer.from(event.data.message.data, 'base64').toString());
-  console.log('Decoded message data:', { websiteUrl, industry, reportId, analysisType });
+  const { websiteUrl, industry, companyName, location, reportId, analysisType } = JSON.parse(Buffer.from(event.data.message.data, 'base64').toString());
+  console.log('Decoded message data:', { websiteUrl, industry, companyName, location, reportId, analysisType });
   
   try {
     // Get current AI configuration
@@ -96,15 +96,15 @@ exports.handleAIAnalysis = async (event) => {
       throw new Error(`No API call function found for ${analysisType}`);
     }
 
-    // Extract company name from URL
-    const companyName = extractCompanyName(websiteUrl);
-    console.log('Extracted company name:', companyName);
+    // Use provided companyName if available, otherwise extract from URL
+    const finalCompanyName = companyName && companyName.trim() !== '' ? companyName : extractCompanyName(websiteUrl);
+    console.log('Using company name:', finalCompanyName);
 
     console.log('Starting API calls for analysis...');
     // Make API calls for both SEO and company analysis
     const [seoResult, companyResult] = await Promise.all([
-      apiCallFunction(websiteUrl, industry, serviceConfig, 'seoAnalysis', companyName),
-      apiCallFunction(websiteUrl, industry, serviceConfig, 'companyAnalysis', companyName)
+      apiCallFunction(websiteUrl, industry, serviceConfig, 'seoAnalysis', finalCompanyName, location),
+      apiCallFunction(websiteUrl, industry, serviceConfig, 'companyAnalysis', finalCompanyName, location)
     ]);
     console.log('API calls completed successfully');
 
@@ -165,14 +165,15 @@ function getAPICallFunction(analysisType) {
 /**
  * Formats the prompt using the template and parameters
  */
-function formatPrompt(template, url, industry, companyName = null) {
+function formatPrompt(template, url, industry, companyName = null, location = null) {
   return template
     .replace('{url}', url)
     .replace('{industry}', industry)
-    .replace('{company}', companyName || extractCompanyName(url));
+    .replace('{company}', companyName || extractCompanyName(url))
+    .replace('{location}', location || 'the area');
 }
 
-async function callGeminiAPI(websiteUrl, industry, serviceConfig, analysisType, companyName) {
+async function callGeminiAPI(websiteUrl, industry, serviceConfig, analysisType, companyName, location = null) {
   try {
     console.log('Starting Gemini API call with config:', {
       useVertexAI: process.env.GOOGLE_GENAI_USE_VERTEXAI === 'true',
@@ -196,13 +197,15 @@ async function callGeminiAPI(websiteUrl, industry, serviceConfig, analysisType, 
     const safeCompanyName = companyName && companyName.trim() !== '' ? companyName : 'the company';
     const safeWebsiteUrl = websiteUrl && websiteUrl.trim() !== '' ? websiteUrl : 'the website';
     const safeIndustry = industry && industry.trim() !== '' ? industry : 'the industry';
+    const safeLocation = location && location.trim() !== '' ? location : 'the area';
 
     const prompt = promptTemplate
       .replace('{websiteUrl}', safeWebsiteUrl)
       .replace('{url}', safeWebsiteUrl)
       .replace('{industry}', safeIndustry)
       .replace('{companyName}', safeCompanyName)
-      .replace('{company}', safeCompanyName);
+      .replace('{company}', safeCompanyName)
+      .replace('{location}', safeLocation);
 
     console.log('Prepared prompt for Gemini:', prompt);
 
@@ -282,7 +285,7 @@ async function callVertexAI(prompt, model) {
   }
 }
 
-async function callClaudeAPI(url, industry, config, analysisType, companyName = null) {
+async function callClaudeAPI(url, industry, config, analysisType, companyName = null, location = null) {
   const apiKey = config.claudeApiKey;
   if (!apiKey) throw new Error('Claude API key not configured');
 
@@ -290,7 +293,7 @@ async function callClaudeAPI(url, industry, config, analysisType, companyName = 
     model: config.model,
     messages: [{
       role: 'user',
-      content: formatPrompt(config.promptTemplates[analysisType], url, industry, companyName)
+      content: formatPrompt(config.promptTemplates[analysisType], url, industry, companyName, location)
     }],
     max_tokens: config.maxTokens,
     temperature: config.temperature
@@ -305,7 +308,7 @@ async function callClaudeAPI(url, industry, config, analysisType, companyName = 
   return response.data;
 }
 
-async function callChatGPTAPI(url, industry, config, analysisType, companyName = null) {
+async function callChatGPTAPI(url, industry, config, analysisType, companyName = null, location = null) {
   const apiKey = config.chatGptApiKey;
   if (!apiKey) throw new Error('ChatGPT API key not configured');
 
@@ -313,7 +316,7 @@ async function callChatGPTAPI(url, industry, config, analysisType, companyName =
     model: config.model,
     messages: [{
       role: 'user',
-      content: formatPrompt(config.promptTemplates[analysisType], url, industry, companyName)
+      content: formatPrompt(config.promptTemplates[analysisType], url, industry, companyName, location)
     }],
     max_tokens: config.maxTokens,
     temperature: config.temperature
@@ -337,7 +340,7 @@ async function callChatGPTAPI(url, industry, config, analysisType, companyName =
  * HTTP endpoint for direct company analysis
  */
 exports.analyzeCompany = async (data) => {
-  const { url, industry, companyName: providedCompanyName } = data;
+  const { url, industry, companyName: providedCompanyName, location } = data;
   
   if (!url) {
     throw new Error('URL is required');
@@ -354,12 +357,12 @@ exports.analyzeCompany = async (data) => {
     }
 
     // Use provided companyName if available, otherwise extract from URL
-    const companyName = providedCompanyName && providedCompanyName.trim() !== ''
+    const finalCompanyName = providedCompanyName && providedCompanyName.trim() !== ''
       ? providedCompanyName
       : extractCompanyName(url);
 
     // Make API call for company analysis
-    const result = await callGeminiAPI(url, industry, serviceConfig, 'companyAnalysis', companyName);
+    const result = await callGeminiAPI(url, industry, serviceConfig, 'companyAnalysis', finalCompanyName, location);
 
     return {
       status: 'completed',

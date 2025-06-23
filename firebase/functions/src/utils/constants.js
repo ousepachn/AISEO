@@ -16,16 +16,19 @@ exports.ANALYSIS_TYPES = {
   WEBSITE_STRUCTURE: 'website-structure'
 };
 
+// Import prompt templates
+const { COMPANY_ANALYSIS_PROMPT, SEO_ANALYSIS_PROMPT } = require('./promptTemplates');
+
 // AI Service Configuration
 exports.AI_SERVICES = {
   [exports.ANALYSIS_TYPES.GEMINI]: {
     enabled: true,
     model: 'gemini-2.0-flash',
-    maxTokens: 2048,
+    maxTokens: 4096,
     temperature: 0.7,
     promptTemplates: {
-      seoAnalysis: 'Analyze the SEO and content quality of {url} for the {industry} industry. Focus on content relevance, keyword usage, and overall SEO effectiveness.',
-      companyAnalysis: 'What do you know about {company} in the {industry} industry? Analyze their market position, strengths, and unique value propositions based on their website content.'
+      seoAnalysis: SEO_ANALYSIS_PROMPT,
+      companyAnalysis: COMPANY_ANALYSIS_PROMPT
     }
   },
   [exports.ANALYSIS_TYPES.CLAUDE]: {
@@ -34,8 +37,8 @@ exports.AI_SERVICES = {
     maxTokens: 4096,
     temperature: 0.7,
     promptTemplates: {
-      seoAnalysis: 'Analyze the SEO and content quality of {url} for the {industry} industry. Focus on content relevance, keyword usage, and overall SEO effectiveness.',
-      companyAnalysis: 'What do you know about {company} in the {industry} industry? Analyze their market position, strengths, and unique value propositions based on their website content.'
+      seoAnalysis: SEO_ANALYSIS_PROMPT,
+      companyAnalysis: COMPANY_ANALYSIS_PROMPT
     }
   },
   [exports.ANALYSIS_TYPES.CHATGPT]: {
@@ -44,8 +47,8 @@ exports.AI_SERVICES = {
     maxTokens: 4096,
     temperature: 0.7,
     promptTemplates: {
-      seoAnalysis: 'Analyze the SEO and content quality of {url} for the {industry} industry. Focus on content relevance, keyword usage, and overall SEO effectiveness.',
-      companyAnalysis: 'What do you know about {company} in the {industry} industry? Analyze their market position, strengths, and unique value propositions based on their website content.'
+      seoAnalysis: SEO_ANALYSIS_PROMPT,
+      companyAnalysis: COMPANY_ANALYSIS_PROMPT
     }
   }
 };

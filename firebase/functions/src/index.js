@@ -39,8 +39,8 @@ exports.analyze = onRequest({
   memory: '256MB',
 }, async (req, res) => {
   console.log('[analyze] Function triggered.');
-  const { websiteUrl, email, industry, location, enabledServices } = req.body;
-  console.log('[analyze] Request body:', { websiteUrl, email, industry, enabledServices });
+  const { websiteUrl, email, industry, location, companyName, enabledServices } = req.body;
+  console.log('[analyze] Request body:', { websiteUrl, email, industry, companyName, enabledServices });
 
   if (!websiteUrl) {
     console.log('[analyze] Error: Website URL is required.');
@@ -68,6 +68,8 @@ exports.analyze = onRequest({
       const dataBuffer = Buffer.from(JSON.stringify({
         websiteUrl,
         industry,
+        companyName,
+        location,
         reportId,
         analysisType
       }));
