@@ -3,6 +3,13 @@
 const COMPANY_ANALYSIS_PROMPT = `Company Analysis Prompt
 **CRITICAL: DO NOT HALLUCINATE. If you don't know something, explicitly state "I don't know" or "I have no knowledge of this company." Do not provide generic information.**
 
+**IMPORTANT FORMATTING INSTRUCTION:**
+ALWAYS format each section header on its own line, starting with:
+## SECTION 1: STATIC KNOWLEDGE ASSESSMENT
+## SECTION 2: INDUSTRY COMPETITIVE LANDSCAPE
+## SECTION 3: MARKET RECOGNITION ASSESSMENT
+Do NOT put any content on the same line as the section header. Each section header must be followed by a line break, then the content.
+
 Analyzing: {company} | Industry: {industry} | Location: {location}
 
 ## SECTION 1: STATIC KNOWLEDGE ASSESSMENT

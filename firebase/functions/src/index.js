@@ -29,6 +29,22 @@ const aiAnalysisController = require('./controllers/aiAnalysis');
 const pageSpeedController = require('./controllers/pageSpeed');
 const websiteStructureController = require('./controllers/websiteStructure');
 
+// Add this helper function near the top
+function buildSimplifiedPrompts({ company, industry, location }) {
+  return {
+    companyAnalysis: {
+      "STATIC KNOWLEDGE ASSESSMENT": `What specific information do you have about ${company} from your training data?`,
+      "INDUSTRY COMPETITIVE LANDSCAPE": `Who are the top 3 prominent ${industry} companies in ${location} from your training data?`,
+      "MARKET RECOGNITION ASSESSMENT": `How likely is ${company} to be mentioned as an ${industry} leader in ${location}?`
+    },
+    seoAnalysis: {
+      "WEBSITE CONTENT ANALYSIS": `What are the primary services/products, target customers, and unique value propositions mentioned on ${company}'s website?`,
+      "AI DISCOVERABILITY TEST": `Would ${company} be mentioned in realistic customer queries for ${industry} services in ${location}?`,
+      "SEO OPTIMIZATION ASSESSMENT": `What are the strengths, gaps, and top recommendations for improving ${company}'s website SEO for ${location}?`
+    }
+  };
+}
+
 /**
  * Main HTTP endpoint that initiates the analysis process
  */
@@ -49,13 +65,20 @@ exports.analyze = onRequest({
 
   try {
     console.log('[analyze] Creating initial report document in Firestore...');
+    // Build simplified prompts
+    const prompts = buildSimplifiedPrompts({
+      company: companyName,
+      industry,
+      location
+    });
     // Create initial report document
     const reportRef = await db.collection(COLLECTIONS.REPORTS).add({
       websiteUrl,
       email: email || null,
       submittedAt: new Date(),
       status: 'processing',
-      enabledServices: enabledServices || [ANALYSIS_TYPES.GEMINI, ANALYSIS_TYPES.CLAUDE, ANALYSIS_TYPES.CHATGPT]
+      enabledServices: enabledServices || [ANALYSIS_TYPES.GEMINI, ANALYSIS_TYPES.CLAUDE, ANALYSIS_TYPES.CHATGPT],
+      prompts
     });
     console.log('[analyze] Report document created with ID:', reportRef.id);
 

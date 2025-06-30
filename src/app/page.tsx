@@ -1,8 +1,9 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import { db } from "./firebase";
 import { doc, onSnapshot } from "firebase/firestore";
+import { useSearchParams } from "next/navigation";
 
 const TOTAL_STEPS = 4;
 
@@ -44,19 +45,23 @@ const ScoreIndicator = ({ score }: { score?: number }) => {
 function extractSections(text: string) {
   if (!text) return {};
   const sections: Record<string, string> = {};
-  const regex = /##+\s*SECTION\s*\d+:?\s*([A-Z\s]+)/g;
+  // Match: ## SECTION 1: SECTION NAME [content...]
+  // Works for both: header on its own line, or header + content on same line
+  const regex = /##+\s*section\s*\d+[:.\-]?\s*([A-Za-z0-9\s]+)[\n\r]+([\s\S]*?)(?=##+\s*section\s*\d+[:.\-]?|$)/gi;
   let match;
-  let lastIndex = 0;
-  let lastTitle = '';
   while ((match = regex.exec(text)) !== null) {
-    if (lastTitle) {
-      sections[lastTitle] = text.slice(lastIndex, match.index).trim();
-    }
-    lastTitle = match[1].trim();
-    lastIndex = regex.lastIndex;
+    const title = match[1].trim();
+    const content = match[2].trim();
+    sections[title] = content;
   }
-  if (lastTitle) {
-    sections[lastTitle] = text.slice(lastIndex).trim();
+  // Fallback for old data: if nothing matched, try to split by inline headers
+  if (Object.keys(sections).length === 0) {
+    const fallbackRegex = /##+\s*section\s*\d+[:.\-]?\s*([A-Za-z0-9\s]+)\s*([\s\S]*?)(?=##+\s*section\s*\d+[:.\-]?|$)/gi;
+    while ((match = fallbackRegex.exec(text)) !== null) {
+      const title = match[1].trim();
+      const content = match[2].trim();
+      sections[title] = content;
+    }
   }
   return sections;
 }
@@ -90,6 +95,11 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<any>(null);
   const [reportId, setReportId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const [expandedBoxes, setExpandedBoxes] = useState<Record<string, boolean>>({});
+  const [overflowingBoxes, setOverflowingBoxes] = useState<Record<string, boolean>>({});
+  // Refs for each box (section+model)
+  const boxRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // Form data
   const [form, setForm] = useState({
@@ -157,6 +167,28 @@ export default function Home() {
 
     return () => unsub();
   }, [reportId]);
+
+  useEffect(() => {
+    // DEV ONLY: If ?report=ID is present, use it
+    if (process.env.NODE_ENV === "development") {
+      const reportParam = searchParams.get("report");
+      if (reportParam && !reportId) {
+        setReportId(reportParam);
+      }
+    }
+  }, [searchParams, reportId]);
+
+  // After rendering, check which boxes are overflowing
+  useEffect(() => {
+    const newExpandable: Record<string, boolean> = {};
+    Object.entries(boxRefs.current).forEach(([boxKey, el]) => {
+      if (el) {
+        // Only check when not expanded
+        newExpandable[boxKey] = el.scrollHeight > 120; // 7.5em ~ 120px
+      }
+    });
+    setOverflowingBoxes(newExpandable);
+  }, [results]);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50">
@@ -362,21 +394,81 @@ export default function Home() {
                             <div className="font-semibold text-slate-800 mb-2 text-base flex items-center">
                               <span className="mr-2">{section.replace(/_/g, ' ').replace(/\s+/g, ' ').trim()}</span>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                              {modelNames.map((model) => {
+                            {/* Show the simplified prompt/question for this section */}
+                            {results.prompts?.companyAnalysis?.[section] && (
+                              <div className="mb-2 text-slate-500 text-sm italic">
+                                {results.prompts.companyAnalysis[section]}
+                              </div>
+                            )}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
+                              {modelNames.map((model, idx) => {
                                 const analysis = results.aiAnalysis[model];
                                 const sections = extractSections(analysis?.companyAnalysis?.text || '');
                                 const sectionText = sections[section] || '';
-                                const { summary, risk } = getSummaryAndRisk(sectionText);
+                                const { risk } = getSummaryAndRisk(sectionText);
+                                const boxKey = `${section}_${model}`;
+                                const isExpanded = expandedBoxes[boxKey];
+                                const isExpandable = overflowingBoxes[boxKey];
                                 return (
-                                  <div key={model} className="border border-slate-200 rounded-xl p-4 flex flex-col items-start bg-slate-50">
+                                  <div
+                                    key={model}
+                                    ref={el => { boxRefs.current[boxKey] = el; }}
+                                    className="border border-slate-200 rounded-xl p-4 flex flex-col items-start bg-slate-50"
+                                    style={{
+                                      minHeight: '7em',
+                                      whiteSpace: 'pre-line',
+                                      wordBreak: 'break-word',
+                                      lineHeight: 1.5,
+                                      height: 'auto',
+                                      maxHeight: isExpanded ? 'none' : '7.5em',
+                                      overflow: isExpanded ? 'visible' : 'hidden',
+                                      padding: '1.25rem',
+                                      position: 'relative',
+                                      transition: 'max-height 0.2s',
+                                    }}
+                                  >
                                     <div className="flex items-center mb-1">
                                       <TrafficLight risk={risk} />
                                       <span className="font-semibold capitalize text-slate-700">{model}</span>
                                     </div>
-                                    <div className="text-sm text-slate-700" title={sectionText} style={{overflowWrap:'anywhere'}}>
-                                      {summary || <span className="text-slate-400">No data</span>}
+                                    <div
+                                      className="text-xs text-slate-700 w-full"
+                                      title={sectionText}
+                                      style={{overflowWrap:'anywhere'}}
+                                    >
+                                      {sectionText || <span className="text-slate-400">No data</span>}
+                                      {isExpandable && !isExpanded && (
+                                        <div style={{
+                                          position: 'absolute',
+                                          bottom: 0,
+                                          left: 0,
+                                          width: '100%',
+                                          height: '2em',
+                                          background: 'linear-gradient(to bottom, rgba(250,250,250,0), #f8fafc 90%)',
+                                          pointerEvents: 'none',
+                                          zIndex: 1,
+                                        }} />
+                                      )}
                                     </div>
+                                    {isExpandable && (
+                                      <button
+                                        aria-label={isExpanded ? 'Show less' : 'Show more'}
+                                        className="absolute right-3 bottom-2 z-10 text-blue-600 hover:text-blue-800 text-[11px] underline focus:outline-none flex items-center gap-1 bg-transparent border-none p-0 m-0"
+                                        onClick={() => setExpandedBoxes(prev => ({ ...prev, [boxKey]: !isExpanded }))}
+                                        style={{
+                                          fontSize: '0.8rem',
+                                          minWidth: '60px',
+                                          justifyContent: 'center',
+                                          background: 'transparent',
+                                          boxShadow: 'none',
+                                          padding: 0,
+                                          border: 'none',
+                                        }}
+                                      >
+                                        {isExpanded ? 'Show less' : 'Show more'}
+                                        <span style={{fontSize: '1em'}}>{isExpanded ? '▲' : '▼'}</span>
+                                      </button>
+                                    )}
                                   </div>
                                 );
                               })}
@@ -411,6 +503,12 @@ export default function Home() {
                         </div>
                         {analysis?.status === 'completed' ? (
                           <div className="text-sm text-slate-600 whitespace-pre-wrap">
+                            {/* Show the simplified prompt/question for this section */}
+                            {results.prompts?.seoAnalysis?.[model] && (
+                              <div className="mb-2 text-slate-500 text-sm italic">
+                                {results.prompts.seoAnalysis[model]}
+                              </div>
+                            )}
                             <FormattedText text={analysis?.seoAnalysis?.text} />
                           </div>
                         ) : analysis?.status === 'error' ? (
