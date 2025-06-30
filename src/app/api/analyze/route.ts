@@ -25,7 +25,7 @@ export async function POST(request: Request) {
         companyName: body.companyName,
         location: body.location,
         email: body.email,
-        enabledServices: body.enabledServices || ['gemini', 'chatgpt'],
+        enabledServices: body.enabledServices || ['gemini', 'claude', 'chatgpt'],
       }),
     });
 

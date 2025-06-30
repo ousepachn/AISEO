@@ -54,7 +54,7 @@ exports.analyzeWebsiteStructure = async (url) => {
       sitemapXmlFound: await checkSitemapXml(url),
       h1TagsFound: $('h1').length > 0,
       imageAltsGood: checkImageAlts($),
-      metaDescription: $('meta[name="description"]').attr('content'),
+      metaDescription: $('meta[name="description"]').attr('content') ?? null,
       titleTag: $('title').text(),
       recommendations: generateRecommendations($)
     };

@@ -286,26 +286,71 @@ async function callVertexAI(prompt, model) {
 }
 
 async function callClaudeAPI(url, industry, config, analysisType, companyName = null, location = null) {
-  const apiKey = config.claudeApiKey;
-  if (!apiKey) throw new Error('Claude API key not configured');
+  try {
+    console.log('Starting Claude API call with config:', {
+      model: config.model,
+      analysisType,
+      hasApiKey: !!config.claudeApiKey
+    });
 
-  const response = await axios.post('https://api.anthropic.com/v1/messages', {
-    model: config.model,
-    messages: [{
-      role: 'user',
-      content: formatPrompt(config.promptTemplates[analysisType], url, industry, companyName, location)
-    }],
-    max_tokens: config.maxTokens,
-    temperature: config.temperature
-  }, {
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01'
-    }
-  });
+    const apiKey = config.claudeApiKey;
+    if (!apiKey) throw new Error('Claude API key not configured');
 
-  return response.data;
+    // Add safe fallbacks
+    const safeCompanyName = companyName && companyName.trim() !== '' ? companyName : 'the company';
+    const safeWebsiteUrl = url && url.trim() !== '' ? url : 'the website';
+    const safeIndustry = industry && industry.trim() !== '' ? industry : 'the industry';
+    const safeLocation = location && location.trim() !== '' ? location : 'the area';
+
+    const prompt = config.promptTemplates[analysisType]
+      .replace('{websiteUrl}', safeWebsiteUrl)
+      .replace('{url}', safeWebsiteUrl)
+      .replace('{industry}', safeIndustry)
+      .replace('{companyName}', safeCompanyName)
+      .replace('{company}', safeCompanyName)
+      .replace('{location}', safeLocation);
+
+    console.log('Prepared prompt for Claude:', prompt);
+
+    const response = await axios.post('https://api.anthropic.com/v1/messages', {
+      model: config.model,
+      messages: [{
+        role: 'user',
+        content: prompt
+      }],
+      max_tokens: config.maxTokens,
+      temperature: config.temperature
+    }, {
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01'
+      }
+    });
+
+    console.log('Claude API call successful, response structure:', {
+      hasResponse: !!response?.data,
+      hasContent: !!response?.data?.content,
+      responseType: typeof response?.data
+    });
+
+    // Format response to match Gemini's format
+    return {
+      text: response.data.content[0].text,
+      model: config.model,
+      // Include usage data if available
+      usage: response.data.usage || null
+    };
+  } catch (error) {
+    console.error('Detailed Claude API error:', {
+      error: error.message,
+      stack: error.stack,
+      code: error.code,
+      details: error.details,
+      response: error.response?.data
+    });
+    throw new Error(`Claude API error: ${error.message}`);
+  }
 }
 
 async function callChatGPTAPI(url, industry, config, analysisType, companyName = null, location = null) {
@@ -340,7 +385,7 @@ async function callChatGPTAPI(url, industry, config, analysisType, companyName =
  * HTTP endpoint for direct company analysis
  */
 exports.analyzeCompany = async (data) => {
-  const { url, industry, companyName: providedCompanyName, location } = data;
+  const { url, industry, companyName: providedCompanyName, location, analysisType = ANALYSIS_TYPES.GEMINI } = data;
   
   if (!url) {
     throw new Error('URL is required');
@@ -349,11 +394,11 @@ exports.analyzeCompany = async (data) => {
   try {
     // Get current AI configuration
     const aiConfig = await getAIConfig();
-    const serviceConfig = aiConfig[ANALYSIS_TYPES.GEMINI]; // Default to Gemini
+    const serviceConfig = aiConfig[analysisType];
 
     // Check if service is enabled
     if (!serviceConfig || !serviceConfig.enabled) {
-      throw new Error('AI service is disabled or not configured');
+      throw new Error(`AI service ${analysisType} is disabled or not configured`);
     }
 
     // Use provided companyName if available, otherwise extract from URL
@@ -361,13 +406,20 @@ exports.analyzeCompany = async (data) => {
       ? providedCompanyName
       : extractCompanyName(url);
 
+    // Get the appropriate API call function
+    const apiCallFunction = getAPICallFunction(analysisType);
+    if (!apiCallFunction) {
+      throw new Error(`No API call function found for ${analysisType}`);
+    }
+
     // Make API call for company analysis
-    const result = await callGeminiAPI(url, industry, serviceConfig, 'companyAnalysis', finalCompanyName, location);
+    const result = await apiCallFunction(url, industry, serviceConfig, 'companyAnalysis', finalCompanyName, location);
 
     return {
       status: 'completed',
       result,
       model: serviceConfig.model,
+      analysisType,
       timestamp: new Date()
     };
   } catch (error) {

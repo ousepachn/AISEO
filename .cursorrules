@@ -1,0 +1,191 @@
+# AI SEO Comparator - Cursor Rules
+
+## Project Overview
+This is an AI SEO Comparator web application that analyzes how different AI models (Gemini, Claude, ChatGPT) perceive and rank business websites. It provides comprehensive AI SEO analysis with structured prompts and location-aware insights.
+
+## Technology Stack
+- **Frontend**: Next.js 14 (App Router) with TypeScript and Tailwind CSS
+- **Backend**: Firebase Functions (Node.js) with Pub/Sub architecture
+- **Database**: Google Firestore
+- **AI Services**: Gemini API, Claude API, ChatGPT API
+- **Deployment**: Vercel (Frontend), Google Cloud Functions (Backend)
+
+## Project Structure
+
+### Root Directory (AISEO/)
+```
+AISEO/
+├── ai-seo-comparator/           # Main Next.js application
+├── .env.local                   # Root environment variables (shared)
+├── package.json                 # Root package.json
+├── prd_seo_comparator.md        # Product requirements document
+├── trd_seo_comparator.md        # Technical requirements document
+└── build_guide.md              # Build and deployment guide
+```
+
+### Frontend Structure (`ai-seo-comparator/src/`)
+```
+src/
+├── app/
+│   ├── api/
+│   │   └── analyze/
+│   │       └── route.ts          # Next.js API route (proxy to Firebase)
+│   ├── page.tsx                  # Main application page (form + results)
+│   ├── layout.tsx                # Root layout
+│   ├── globals.css               # Global styles
+│   └── firebase.ts               # Firebase client configuration
+```
+
+### Backend Structure (`ai-seo-comparator/firebase/functions/src/`)
+```
+firebase/functions/src/
+├── index.js                      # Main Firebase Functions entry point
+├── firebaseInit.js               # Firebase Admin initialization
+├── controllers/
+│   ├── aiAnalysis.js             # AI model analysis logic
+│   ├── pageSpeed.js              # PageSpeed Insights integration
+│   ├── websiteStructure.js       # Website structure analysis
+│   └── analysis.js               # General analysis utilities
+├── utils/
+│   ├── constants.js              # Shared constants and AI service config
+│   └── promptTemplates.js        # AI prompt templates
+└── config/
+    └── environment.js            # Environment configuration
+```
+
+## Key File Locations & Purposes
+
+### Root Files (AISEO/)
+- **`AISEO/.env.local`**: Root environment variables shared across the project
+- **`AISEO/prd_seo_comparator.md`**: Product requirements and specifications
+- **`AISEO/trd_seo_comparator.md`**: Technical requirements and architecture
+- **`AISEO/build_guide.md`**: Comprehensive build and deployment instructions
+
+### Frontend Files
+- **`ai-seo-comparator/src/app/page.tsx`**: Main application with 4-step form and results display
+- **`ai-seo-comparator/src/app/api/analyze/route.ts`**: API proxy that forwards requests to Firebase
+- **`ai-seo-comparator/src/app/firebase.ts`**: Firebase client configuration for real-time updates
+
+### Backend Files
+- **`ai-seo-comparator/firebase/functions/src/index.js`**: Main entry point with HTTP triggers and Pub/Sub handlers
+- **`ai-seo-comparator/firebase/functions/src/controllers/aiAnalysis.js`**: Core AI analysis logic with Gemini, Claude, ChatGPT integration
+- **`ai-seo-comparator/firebase/functions/src/utils/constants.js`**: AI service configurations and shared constants
+- **`ai-seo-comparator/firebase/functions/src/utils/promptTemplates.js`**: Structured prompt templates for AI analysis
+- **`ai-seo-comparator/firebase/functions/src/config/environment.js`**: Environment variables and API key management
+
+## Data Flow Architecture
+
+### Request Flow
+1. **Frontend** (`page.tsx`) → User submits form with company details
+2. **Next.js API** (`route.ts`) → Proxies request to Firebase Functions
+3. **Firebase Function** (`index.js`) → Creates report and triggers Pub/Sub messages
+4. **AI Analysis** (`aiAnalysis.js`) → Processes Pub/Sub messages and calls AI APIs
+5. **Firestore** → Stores results for real-time frontend updates
+
+### AI Analysis Flow
+1. **Prompt Templates** (`promptTemplates.js`) → Structured prompts for each AI model
+2. **AI Controllers** (`aiAnalysis.js`) → Handles API calls to Gemini, Claude, ChatGPT
+3. **Response Processing** → Standardizes responses across all AI models
+4. **Result Storage** → Saves to Firestore for frontend consumption
+
+## Key Patterns & Conventions
+
+### Frontend Patterns
+- **Form State Management**: Uses React useState for multi-step form
+- **Real-time Updates**: Firebase Firestore listeners for live results
+- **Error Handling**: Try-catch blocks with user-friendly error messages
+- **Loading States**: Loading indicators during analysis process
+
+### Backend Patterns
+- **Pub/Sub Architecture**: Asynchronous processing via Google Cloud Pub/Sub
+- **Controller Pattern**: Separated business logic in controller files
+- **Configuration Management**: Centralized config in utils/constants.js
+- **Error Handling**: Comprehensive error logging and graceful fallbacks
+
+### AI Integration Patterns
+- **Standardized Prompts**: Consistent prompt structure across all AI models
+- **Response Formatting**: Normalized responses for frontend consumption
+- **Anti-Hallucination**: Built-in instructions to prevent AI fabrication
+- **Location Awareness**: Geographic context in all AI analyses
+
+## Environment Variables & Configuration
+
+### Environment File Locations
+The system searches for `.env` files in the following order:
+1. **`ai-seo-comparator/firebase/functions/.env.local`** (functions-specific)
+2. **`ai-seo-comparator/firebase/functions/.env`** (functions fallback)
+3. **`AISEO/.env.local`** (root shared environment) ⭐ **Primary location**
+4. **`AISEO/.env`** (root fallback)
+
+### Required Environment Variables
+- **`MYAPP_GEMINI_API_KEY`**: Gemini API key for AI analysis
+- **`MYAPP_CLAUDE_API_KEY`**: Claude API key for AI analysis
+- **`MYAPP_CHATGPT_API_KEY`**: ChatGPT API key for AI analysis
+- **`MYAPP_PAGESPEED_API_KEY`**: PageSpeed Insights API key
+- **`MYAPP_GOOGLE_CLOUD_PROJECT`**: Google Cloud project ID
+- **`MYAPP_FIREBASE_PROJECT_ID`**: Firebase project ID
+
+### Optional Environment Variables
+- **`MYAPP_GOOGLE_CLOUD_LOCATION`**: Google Cloud region (default: 'global')
+- **`MYAPP_GOOGLE_GENAI_USE_VERTEXAI`**: Use Vertex AI (default: false)
+- **`MYAPP_FIREBASE_FUNCTIONS_REGION`**: Functions region (default: 'us-central1')
+- **`MYAPP_FUNCTION_TIMEOUT_SECONDS`**: Function timeout (default: 300)
+- **`MYAPP_FUNCTION_MEMORY`**: Function memory (default: '256MB')
+- **`MYAPP_LOG_LEVEL`**: Logging level (default: 'info')
+
+### Configuration Management
+- **Frontend**: Firebase config in `ai-seo-comparator/src/app/firebase.ts`
+- **Backend**: Environment config in `ai-seo-comparator/firebase/functions/src/config/environment.js`
+- **Shared**: Root environment variables in `AISEO/.env.local`
+
+## Development Workflow
+1. **Frontend Changes**: Edit files in `ai-seo-comparator/src/` directory
+2. **Backend Changes**: Edit files in `ai-seo-comparator/firebase/functions/src/` directory
+3. **Environment Setup**: Configure variables in `AISEO/.env.local`
+4. **Testing**: Use Firebase emulator for local backend testing
+5. **Deployment**: Frontend to Vercel, Backend to Google Cloud Functions
+
+## Common Tasks & File Locations
+
+### Adding New AI Model
+1. Update `ai-seo-comparator/firebase/functions/src/utils/constants.js` (AI_SERVICES config)
+2. Add API call function in `ai-seo-comparator/firebase/functions/src/controllers/aiAnalysis.js`
+3. Update prompt templates in `ai-seo-comparator/firebase/functions/src/utils/promptTemplates.js`
+
+### Modifying AI Prompts
+- Edit `ai-seo-comparator/firebase/functions/src/utils/promptTemplates.js`
+- Update placeholder variables: `{company}`, `{industry}`, `{location}`, `{url}`
+
+### Adding New Analysis Type
+1. Create new controller in `ai-seo-comparator/firebase/functions/src/controllers/`
+2. Add Pub/Sub topic in `ai-seo-comparator/firebase/functions/src/utils/constants.js`
+3. Update `ai-seo-comparator/firebase/functions/src/index.js` with new handler
+
+### Frontend UI Changes
+- Main form: `ai-seo-comparator/src/app/page.tsx`
+- API routes: `ai-seo-comparator/src/app/api/`
+- Styling: `ai-seo-comparator/src/app/globals.css` (Tailwind CSS)
+
+### Environment Configuration
+- Primary env file: `AISEO/.env.local`
+- Backend env config: `ai-seo-comparator/firebase/functions/src/config/environment.js`
+- Frontend env usage: `ai-seo-comparator/src/app/firebase.ts`
+
+## Code Quality Standards
+- **TypeScript**: Use for frontend files (.tsx, .ts)
+- **JavaScript**: Use for backend files (.js)
+- **Error Handling**: Always include try-catch blocks
+- **Logging**: Use console.log for debugging, structured logging for production
+- **Comments**: JSDoc comments for functions, inline comments for complex logic
+
+## Testing Strategy
+- **Frontend**: Component testing with React Testing Library
+- **Backend**: Unit tests in `ai-seo-comparator/firebase/functions/src/test/`
+- **Integration**: Firebase emulator for end-to-end testing
+- **AI Testing**: Mock responses for development, real API calls for production
+
+## Deployment Notes
+- **Frontend**: Automatic deployment to Vercel on git push
+- **Backend**: Manual deployment with `firebase deploy --only functions`
+- **Environment**: Separate configs for dev, staging, and production
+- **Monitoring**: Firebase Functions logs and Vercel analytics 

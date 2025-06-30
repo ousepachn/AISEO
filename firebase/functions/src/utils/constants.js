@@ -33,7 +33,7 @@ exports.AI_SERVICES = {
   },
   [exports.ANALYSIS_TYPES.CLAUDE]: {
     enabled: true,
-    model: 'claude-3-opus-20240229',
+    model: 'claude-3-7-sonnet-20250219',
     maxTokens: 4096,
     temperature: 0.7,
     promptTemplates: {
@@ -43,7 +43,7 @@ exports.AI_SERVICES = {
   },
   [exports.ANALYSIS_TYPES.CHATGPT]: {
     enabled: true,
-    model: 'gpt-4-turbo-preview',
+    model: 'gpt-4.1-mini',
     maxTokens: 4096,
     temperature: 0.7,
     promptTemplates: {

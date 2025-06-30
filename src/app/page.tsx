@@ -28,6 +28,62 @@ const FormattedText = ({ text }: { text: string | undefined }) => {
   );
 };
 
+const StatusIndicator = ({ value }: { value: boolean }) => (
+  <span className={`inline-block w-3 h-3 rounded-full mr-2 align-middle ${value ? 'bg-green-500' : 'bg-red-500'}`}></span>
+);
+
+const ScoreIndicator = ({ score }: { score?: number }) => {
+  if (typeof score !== 'number') return null;
+  let color = 'bg-red-500';
+  if (score >= 90) color = 'bg-green-500';
+  else if (score >= 50) color = 'bg-yellow-400';
+  return <span className={`inline-block w-3 h-3 rounded-full mr-1 align-middle ${color}`}></span>;
+};
+
+// Utility: Extract section text from markdown
+function extractSections(text: string) {
+  if (!text) return {};
+  const sections: Record<string, string> = {};
+  const regex = /##+\s*SECTION\s*\d+:?\s*([A-Z\s]+)/g;
+  let match;
+  let lastIndex = 0;
+  let lastTitle = '';
+  while ((match = regex.exec(text)) !== null) {
+    if (lastTitle) {
+      sections[lastTitle] = text.slice(lastIndex, match.index).trim();
+    }
+    lastTitle = match[1].trim();
+    lastIndex = regex.lastIndex;
+  }
+  if (lastTitle) {
+    sections[lastTitle] = text.slice(lastIndex).trim();
+  }
+  return sections;
+}
+
+// Utility: Get summary and risk color
+function getSummaryAndRisk(text: string) {
+  if (!text) return { summary: '', risk: 'gray' };
+  const firstSentence = text.split(/[.!?]/)[0];
+  const lower = text.toLowerCase();
+  if (lower.includes('no knowledge') || lower.includes('unknown') || lower.includes('not applicable') || lower.includes('cannot provide')) {
+    return { summary: firstSentence, risk: 'red' };
+  }
+  if (lower.includes('limited') || lower.includes('not sufficient') || lower.includes('partial')) {
+    return { summary: firstSentence, risk: 'yellow' };
+  }
+  if (lower.includes('comprehensive') || lower.includes('confident') || lower.includes('strong') || lower.includes('well-known')) {
+    return { summary: firstSentence, risk: 'green' };
+  }
+  return { summary: firstSentence, risk: 'yellow' };
+}
+
+// Traffic light icon
+function TrafficLight({ risk }: { risk: string }) {
+  const color = risk === 'red' ? 'bg-red-500' : risk === 'yellow' ? 'bg-yellow-400' : risk === 'green' ? 'bg-green-500' : 'bg-slate-300';
+  return <span className={`inline-block w-3 h-3 rounded-full mr-2 align-middle ${color}`}></span>;
+}
+
 export default function Home() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -65,7 +121,7 @@ export default function Home() {
           body: JSON.stringify({
             ...form,
             websiteUrl: formattedUrl,
-            enabledServices: ['gemini',  'chatgpt'], // 'claude'
+            enabledServices: ['gemini', 'claude', 'chatgpt'],
           }),
         });
 
@@ -286,28 +342,89 @@ export default function Home() {
                 {/* AI Analysis */}
                 <div className="bg-white rounded-2xl shadow-xl p-8">
                   <h3 className="text-2xl font-bold mb-6 text-slate-900">AI Analysis</h3>
-                  <div className="grid md:grid-cols-2 gap-6">
-                    {Object.entries(results.aiAnalysis || {}).map(([model, analysis]: [string, any]) => (
-                      <div key={model} className="border border-slate-200 rounded-xl p-6">
-                        <h4 className="font-semibold text-lg mb-4 capitalize">{model}</h4>
-                        <div className="text-sm text-slate-600 whitespace-pre-wrap">
-                          <FormattedText text={analysis?.companyAnalysis?.text} />
-                        </div>
-                      </div>
-                    ))}
+                  <div className="mb-4 text-sm text-slate-600">
+                    Models analyzed: {Object.keys(results.aiAnalysis || {}).join(', ')}
                   </div>
+                  {/* Section-based layout */}
+                  {(() => {
+                    // Gather all section titles from all models
+                    const allSections = new Set<string>();
+                    Object.values(results.aiAnalysis || {}).forEach((analysis: any) => {
+                      const sections = extractSections(analysis?.companyAnalysis?.text || '');
+                      Object.keys(sections).forEach((title) => allSections.add(title));
+                    });
+                    const sectionTitles = Array.from(allSections);
+                    const modelNames = Object.keys(results.aiAnalysis || {});
+                    return (
+                      <div className="space-y-6">
+                        {sectionTitles.map((section) => (
+                          <div key={section}>
+                            <div className="font-semibold text-slate-800 mb-2 text-base flex items-center">
+                              <span className="mr-2">{section.replace(/_/g, ' ').replace(/\s+/g, ' ').trim()}</span>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              {modelNames.map((model) => {
+                                const analysis = results.aiAnalysis[model];
+                                const sections = extractSections(analysis?.companyAnalysis?.text || '');
+                                const sectionText = sections[section] || '';
+                                const { summary, risk } = getSummaryAndRisk(sectionText);
+                                return (
+                                  <div key={model} className="border border-slate-200 rounded-xl p-4 flex flex-col items-start bg-slate-50">
+                                    <div className="flex items-center mb-1">
+                                      <TrafficLight risk={risk} />
+                                      <span className="font-semibold capitalize text-slate-700">{model}</span>
+                                    </div>
+                                    <div className="text-sm text-slate-700" title={sectionText} style={{overflowWrap:'anywhere'}}>
+                                      {summary || <span className="text-slate-400">No data</span>}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* SEO Analysis */}
                 <div className="bg-white rounded-2xl shadow-xl p-8">
                   <h3 className="text-2xl font-bold mb-6 text-slate-900">SEO Analysis</h3>
+                  <div className="mb-4 text-sm text-slate-600">
+                    Models analyzed: {Object.keys(results.aiAnalysis || {}).join(', ')}
+                  </div>
                   <div className="grid md:grid-cols-2 gap-6">
                     {Object.entries(results.aiAnalysis || {}).map(([model, analysis]: [string, any]) => (
                       <div key={model} className="border border-slate-200 rounded-xl p-6">
-                        <h4 className="font-semibold text-lg mb-4 capitalize">{model}</h4>
-                        <div className="text-sm text-slate-600 whitespace-pre-wrap">
-                          <FormattedText text={analysis?.seoAnalysis?.text} />
+                        <div className="flex items-center justify-between mb-4">
+                          <h4 className="font-semibold text-lg capitalize">{model}</h4>
+                          <span className={`text-xs px-2 py-1 rounded-full ${
+                            analysis?.status === 'completed' 
+                              ? 'bg-green-100 text-green-800' 
+                              : analysis?.status === 'error'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {analysis?.status || 'processing...'}
+                          </span>
                         </div>
+                        {analysis?.status === 'completed' ? (
+                          <div className="text-sm text-slate-600 whitespace-pre-wrap">
+                            <FormattedText text={analysis?.seoAnalysis?.text} />
+                          </div>
+                        ) : analysis?.status === 'error' ? (
+                          <div className="text-sm text-red-600">
+                            Error: {analysis?.error || 'Unknown error occurred'}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-slate-500">
+                            <div className="flex items-center">
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600 mr-2"></div>
+                              Analyzing with {model}...
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -315,18 +432,113 @@ export default function Home() {
 
                 {/* Website Structure Analysis */}
                 <div className="bg-white rounded-2xl shadow-xl p-8">
-                  <h3 className="text-2xl font-bold mb-6 text-slate-900">Website Structure Analysis</h3>
-                  <pre className="text-sm text-slate-600 whitespace-pre-wrap bg-slate-50 p-4 rounded-lg">
-                    {JSON.stringify(results.websiteStructure, null, 2)}
-                  </pre>
+                  <div className="flex flex-col md:flex-row md:items-end md:justify-between mb-4">
+                    <h3 className="text-2xl font-bold text-slate-900 mb-2 md:mb-0">Website Structure Analysis</h3>
+                    {results.websiteStructure?.timestamp && (
+                      <span className="text-slate-400 text-sm md:text-base md:ml-4">Last run: {new Date(results.websiteStructure.timestamp.seconds * 1000).toLocaleString()}</span>
+                    )}
+                  </div>
+                  {results.websiteStructure ? (
+                    <>
+                      {/* Recommendations - highlighted and moved up */}
+                      {results.websiteStructure.recommendations && results.websiteStructure.recommendations.length > 0 && (
+                        <div className="mb-6 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded-lg">
+                          <div className="font-semibold text-yellow-800 mb-1">Recommendations</div>
+                          <ul className="list-disc ml-6 text-slate-800">
+                            {results.websiteStructure.recommendations.map((rec: string, i: number) => (
+                              <li key={i}>{rec}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full text-sm text-slate-700 border-separate border-spacing-y-2">
+                          <tbody>
+                            <tr>
+                              <td className="font-semibold py-2 pr-4">Image Alt Tags</td>
+                              <td><StatusIndicator value={results.websiteStructure.imageAltsGood} /></td>
+                              <td className="text-slate-500">{results.websiteStructure.imageAltsGood ? 'All images have alt tags' : 'Some images missing alt tags'}</td>
+                            </tr>
+                            <tr>
+                              <td className="font-semibold py-2 pr-4">robots.txt Found</td>
+                              <td><StatusIndicator value={results.websiteStructure.robotsTxtFound} /></td>
+                              <td className="text-slate-500">{results.websiteStructure.robotsTxtFound ? 'Present' : 'Missing'}</td>
+                            </tr>
+                            <tr>
+                              <td className="font-semibold py-2 pr-4">sitemap.xml Found</td>
+                              <td><StatusIndicator value={results.websiteStructure.sitemapXmlFound} /></td>
+                              <td className="text-slate-500">{results.websiteStructure.sitemapXmlFound ? 'Present' : 'Missing'}</td>
+                            </tr>
+                            <tr>
+                              <td className="font-semibold py-2 pr-4">H1 Tags Found</td>
+                              <td><StatusIndicator value={results.websiteStructure.h1TagsFound} /></td>
+                              <td className="text-slate-500">{results.websiteStructure.h1TagsFound ? 'Present' : 'Missing'}</td>
+                            </tr>
+                            <tr>
+                              <td className="font-semibold py-2 pr-4">Title Tag</td>
+                              <td colSpan={2} className="text-slate-900">{results.websiteStructure.titleTag || <span className="text-slate-400">None</span>}</td>
+                            </tr>
+                            <tr>
+                              <td className="font-semibold py-2 pr-4">Meta Description</td>
+                              <td colSpan={2} className={results.websiteStructure.metaDescription ? "text-slate-900" : "text-red-500 font-semibold"}>
+                                {results.websiteStructure.metaDescription || 'None'}
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-slate-400">No website structure data available.</div>
+                  )}
                 </div>
 
                 {/* PageSpeed Analysis */}
                 <div className="bg-white rounded-2xl shadow-xl p-8">
-                  <h3 className="text-2xl font-bold mb-6 text-slate-900">PageSpeed Analysis</h3>
-                  <pre className="text-sm text-slate-600 whitespace-pre-wrap bg-slate-50 p-4 rounded-lg">
-                    {JSON.stringify(results.pageSpeed, null, 2)}
-                  </pre>
+                  <div className="flex flex-col md:flex-row md:items-end md:justify-between mb-4">
+                    <h3 className="text-2xl font-bold text-slate-900 mb-2 md:mb-0">PageSpeed Analysis</h3>
+                    {results.pageSpeed?.timestamp && (
+                      <span className="text-slate-400 text-sm md:text-base md:ml-4">Last run: {new Date(results.pageSpeed.timestamp.seconds * 1000).toLocaleString()}</span>
+                    )}
+                  </div>
+                  {results.pageSpeed && (results.pageSpeed.desktop || results.pageSpeed.mobile) ? (
+                    <div className="grid md:grid-cols-2 gap-8">
+                      {/* Desktop Card */}
+                      <div className="border border-slate-200 rounded-xl p-6 bg-slate-50">
+                        <div className="flex items-center mb-4">
+                          <span className="font-semibold text-lg mr-2">Desktop</span>
+                          <ScoreIndicator score={results.pageSpeed.desktop?.score} />
+                          <span className="ml-2 text-slate-500 text-sm">Score: {results.pageSpeed.desktop?.score ?? 'N/A'}</span>
+                        </div>
+                        <div className="text-sm text-slate-700 space-y-1">
+                          <div><span className="font-medium">Fetch Time:</span> {results.pageSpeed.desktop?.fetchTime || 'N/A'}</div>
+                          <div><span className="font-medium">First Contentful Paint:</span> {results.pageSpeed.desktop?.metrics?.firstContentfulPaint || 'N/A'}</div>
+                          <div><span className="font-medium">Largest Contentful Paint:</span> {results.pageSpeed.desktop?.metrics?.largestContentfulPaint || 'N/A'}</div>
+                          <div><span className="font-medium">Total Blocking Time:</span> {results.pageSpeed.desktop?.metrics?.totalBlockingTime || 'N/A'}</div>
+                          <div><span className="font-medium">Speed Index:</span> {results.pageSpeed.desktop?.metrics?.speedIndex || 'N/A'}</div>
+                          <div><span className="font-medium">Cumulative Layout Shift:</span> {results.pageSpeed.desktop?.metrics?.cumulativeLayoutShift || 'N/A'}</div>
+                        </div>
+                      </div>
+                      {/* Mobile Card */}
+                      <div className="border border-slate-200 rounded-xl p-6 bg-slate-50">
+                        <div className="flex items-center mb-4">
+                          <span className="font-semibold text-lg mr-2">Mobile</span>
+                          <ScoreIndicator score={results.pageSpeed.mobile?.score} />
+                          <span className="ml-2 text-slate-500 text-sm">Score: {results.pageSpeed.mobile?.score ?? 'N/A'}</span>
+                        </div>
+                        <div className="text-sm text-slate-700 space-y-1">
+                          <div><span className="font-medium">Fetch Time:</span> {results.pageSpeed.mobile?.fetchTime || 'N/A'}</div>
+                          <div><span className="font-medium">First Contentful Paint:</span> {results.pageSpeed.mobile?.metrics?.firstContentfulPaint || 'N/A'}</div>
+                          <div><span className="font-medium">Largest Contentful Paint:</span> {results.pageSpeed.mobile?.metrics?.largestContentfulPaint || 'N/A'}</div>
+                          <div><span className="font-medium">Total Blocking Time:</span> {results.pageSpeed.mobile?.metrics?.totalBlockingTime || 'N/A'}</div>
+                          <div><span className="font-medium">Speed Index:</span> {results.pageSpeed.mobile?.metrics?.speedIndex || 'N/A'}</div>
+                          <div><span className="font-medium">Cumulative Layout Shift:</span> {results.pageSpeed.mobile?.metrics?.cumulativeLayoutShift || 'N/A'}</div>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-slate-400">No PageSpeed data available.</div>
+                  )}
                 </div>
               </div>
             </div>
